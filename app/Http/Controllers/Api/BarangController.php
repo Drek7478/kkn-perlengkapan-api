@@ -29,7 +29,6 @@ class BarangController extends Controller
         $query = Barang::query();
 
         // Filter berdasarkan status 'aktif' (default) atau 'hilang' / 'selesai'
-        // Ini penting agar halaman barang hanya menampilkan barang aktif
         if ($request->has('status')) {
             $query->where('status', $request->status);
         } else {
@@ -38,7 +37,6 @@ class BarangController extends Controller
         }
 
         // Search: mencari barang berdasarkan nama (LIKE %keyword%)
-        // when() = jalankan fungsi di dalamnya hanya jika kondisi pertama true
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where('nama_barang', 'LIKE', "%{$search}%");
@@ -81,13 +79,10 @@ class BarangController extends Controller
         // Cek apakah ada file foto yang diupload
         if ($request->hasFile('foto')) {
             // Simpan foto ke folder storage/app/public/barang/
-            // Str::uuid() = menghasilkan string unik (misal: 550e8400-e29b-41d4-a716-446655440000)
-            // extension() = mendapatkan ekstensi file asli (jpg, png, dll)
             $file     = $request->file('foto');
             $filename = Str::uuid() . '.' . $file->extension();
 
             // storeAs('folder_tujuan', 'nama_file', 'disk')
-            // Ini menyimpan file dan mengembalikan path relatif: 'barang/namafile.jpg'
             $path = $file->storeAs('barang', $filename, 'public');
 
             // Simpan path ke data yang akan diinsert ke database
@@ -118,8 +113,7 @@ class BarangController extends Controller
     public function show(string $id): JsonResponse
     {
         // Cari barang berdasarkan ID
-        // with('pengecekan.user') = eager loading: ambil data pengecekan + data user sekaligus
-        //                          Ini menghindari N+1 query problem
+        // with('pengecekan.user') = eager loading
         $barang = Barang::with(['pengecekan' => function ($query) {
             // Urutkan riwayat pengecekan dari terbaru
             $query->orderBy('created_at', 'desc');
@@ -142,10 +136,6 @@ class BarangController extends Controller
 
     /**
      * update(): Mengedit barang (termasuk ganti foto)
-     *
-     * CATATAN PENTING: Karena frontend mengirim menggunakan FormData
-     * dan method spoofing (_method=PUT), route-nya tetap POST
-     * ke /api/barang/{id} dengan _method=PUT
      *
      * @param UpdateBarangRequest $request
      * @param string $id
@@ -170,15 +160,37 @@ class BarangController extends Controller
             ], 403); // 403 = Forbidden
         }
 
-        // Ambil data yang sudah divalidasi
-        $data = $request->validated();
+        // ============================================
+        // PERBAIKAN: Baca input langsung, bukan validated()
+        // karena UpdateBarangRequest menggunakan 'sometimes'
+        // yang tidak mengembalikan field yang tidak dikirim
+        // ============================================
+
+        // Update field teks jika ada di request
+        if ($request->has('nama_barang')) {
+            $barang->nama_barang = $request->input('nama_barang');
+        }
+        if ($request->has('kategori')) {
+            $barang->kategori = $request->input('kategori');
+        }
+        if ($request->has('jumlah_total')) {
+            $barang->jumlah_total = $request->input('jumlah_total');
+        }
+        if ($request->has('jumlah_tersedia')) {
+            $barang->jumlah_tersedia = $request->input('jumlah_tersedia');
+        }
+        if ($request->has('kondisi')) {
+            $barang->kondisi = $request->input('kondisi');
+        }
+        if ($request->has('keterangan')) {
+            $barang->keterangan = $request->input('keterangan');
+        }
 
         // Cek apakah ada file foto baru yang diupload
         if ($request->hasFile('foto')) {
             // Hapus foto lama jika ada
             if ($barang->foto) {
                 // Storage::disk('public')->delete('path/file.jpg')
-                // Ini menghapus file dari folder storage/app/public/
                 Storage::disk('public')->delete($barang->foto);
             }
 
@@ -187,11 +199,11 @@ class BarangController extends Controller
             $filename = Str::uuid() . '.' . $file->extension();
             $path     = $file->storeAs('barang', $filename, 'public');
 
-            $data['foto'] = $path;
+            $barang->foto = $path;
         }
 
-        // Update record di database
-        $barang->update($data);
+        // Simpan perubahan ke database
+        $barang->save();
 
         return response()->json([
             'success' => true,
@@ -257,7 +269,7 @@ class BarangController extends Controller
         // Update status dan tanggal hilang
         $barang->update([
             'status'         => 'hilang',
-            'tanggal_hilang' => now()->toDateString(), // now() = tanggal & waktu saat ini
+            'tanggal_hilang' => now()->toDateString(),
         ]);
 
         return response()->json([
@@ -318,7 +330,7 @@ class BarangController extends Controller
             ], 404);
         }
 
-        // Update status, tanggal selesai, dan catatan
+        // Update status, tanggal selesai
         $barang->update([
             'status'          => 'selesai',
             'tanggal_selesai' => now()->toDateString(),
