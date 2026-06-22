@@ -83,6 +83,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Edit barang (pakai _method=PUT di FormData untuk upload foto)
     Route::post('/barang/{id}', [BarangController::class, 'update']);
 
+    Route::put('/barang/{id}', [BarangController::class, 'update']);
+
     // DELETE /api/barang/{id}
     // Hapus barang beserta fotonya
     Route::delete('/barang/{id}', [BarangController::class, 'destroy']);
